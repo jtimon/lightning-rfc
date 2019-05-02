@@ -103,12 +103,29 @@ the funding transaction and both versions of the commitment transaction.
    * [`1`:`channel_flags`]
    * [`2`:`shutdown_len`] (`option_upfront_shutdown_script`)
    * [`shutdown_len`:`shutdown_scriptpubkey`] (`option_upfront_shutdown_script`)
+   * [`32`:`asset_id`]
+   * [`32`:`feeasset_id`]
 
 The `chain_hash` value denotes the exact blockchain that the opened channel will
 reside within. This is usually the genesis hash of the respective blockchain.
 The existence of the `chain_hash` allows nodes to open channels
 across many distinct blockchains as well as have channels within multiple
 blockchains opened to the same peer (if it supports the target chains).
+
+`asset_id` is optional. It is only needed when the selected chain
+supports multiple assets. If the target chain has only one asset and
+`asset_id` is provided, the channel establishment fails. If the chain does support
+multiple assets but is not provided, the channel establishment
+fails.
+`feeasset_id` is also optional and only needed when the chain
+supports multiple assets. If provided when not needed, the channel
+establishment fails. If not provided when the chain supports multiple
+assets, it is assumed the fee asset and the asset for channel
+operation are the same asset. The fee asset is the asset used to pay
+on-chain fees with. `feeasset_id` can only be provided if `asset_id`
+is provided. The fundee knows whether neither, one or both fields are
+provided by looking at the `payload` field in the message (as described
+in [BOLT #1](01-messaging.md)).
 
 The `temporary_channel_id` is used to identify this channel on a per-peer basis until the
 funding transaction is established, at which point it is replaced
@@ -182,6 +199,12 @@ The sending node:
     - MUST include either a valid `shutdown_scriptpubkey` as required by `shutdown` `scriptpubkey`, or a zero-length `shutdown_scriptpubkey`.
   - otherwise:
     - MAY include a`shutdown_scriptpubkey`.
+  - if the chain specified in `chain_hash` is known to support multiple assets:
+	- MUST provide `asset_id` to identify what asset in the chain the channel will operate with.
+	- MAY provide `feeasset_id` to identify what asset in the chain the channel will pay on-chain fees with.
+	- MUST NOT provide an `feeasset_id` equal to `asset_id`.
+  - otherwise:
+	- MUST NOT provide neither `asset_id` nor `feeasset_id`.
 
 The sending node SHOULD:
   - set `to_self_delay` sufficient to ensure the sender can irreversibly spend a commitment transaction output, in case of misbehavior by the receiver.
@@ -204,6 +227,9 @@ The receiving node MAY fail the channel if:
   - it considers `channel_reserve_satoshis` too large.
   - it considers `max_accepted_htlcs` too small.
   - it considers `dust_limit_satoshis` too small and plans to rely on the sending node publishing its commitment transaction in the event of a data loss (see [message-retransmission](02-peer-protocol.md#message-retransmission)).
+  - the chain specified in `chain_hash` is known to support multiple assets, but the `asset_id` provided is unknown or unwanted to the receiver.
+  - the chain specified in `chain_hash` is known to support multiple assets, and `feeasset_id` is provided; but the asset is not known to the receiver to be accepted as fee within that chain.
+  - the chain specified in `chain_hash` is known to support multiple assets, and `feeasset_id` is not provided; but the `asset_id` provided is not known to the receiver to be accepted as fee within that chain.
 
 The receiving node MUST fail the channel if:
   - the `chain_hash` value is set to a hash of a chain that is unknown to the receiver.
@@ -216,6 +242,9 @@ are not valid DER-encoded compressed secp256k1 pubkeys.
   - `dust_limit_satoshis` is greater than `channel_reserve_satoshis`.
   - the funder's amount for the initial commitment transaction is not sufficient for full [fee payment](03-transactions.md#fee-payment).
   - both `to_local` and `to_remote` amounts for the initial commitment transaction are less than or equal to `channel_reserve_satoshis` (see [BOLT 3](03-transactions.md#commitment-transaction-outputs)).
+  - the chain specified in `chain_hash` is known to support a single asset, but `asset_id` is provided.
+  - the chain specified in `chain_hash` is known to support multiple assets, but `asset_id` is not provided.
+  - the chain specified in `chain_hash` is known to support multiple assets, and both `asset_id` and `feeasset_id` are provided and equal.
 
 The receiving node MUST NOT:
   - consider funds received, using `push_msat`, to be received until the funding transaction has reached sufficient depth.
@@ -317,6 +346,11 @@ signature, via `funding_signed`, it will broadcast the funding transaction.
     * [`32`:`funding_txid`]
     * [`2`:`funding_output_index`]
     * [`64`:`signature`]
+    * [`2`:`funding_fee_output_index`]
+
+`funding_fee_output_index` is optional. The recipient knows whether it is
+provided or not by looking at the `payload` field in the message (as
+described in [BOLT #1](01-messaging.md)).
 
 #### Requirements
 
@@ -326,6 +360,10 @@ The sender MUST set:
     - and MUST NOT broadcast this transaction.
   - `funding_output_index` to the output number of that transaction that corresponds the funding transaction output, as defined in [BOLT #3](03-transactions.md#funding-transaction-output).
   - `signature` to the valid signature using its `funding_pubkey` for the initial commitment transaction, as defined in [BOLT #3](03-transactions.md#commitment-transaction).
+  - if `feeasset_id` was provided in the `open_channel` message:
+	- MUST provide `funding_fee_output_index` to the output number of that transaction that corresponds the funding transaction fee output, as defined in [BOLT #3](03-transactions.md#funding-transaction-output).
+  - otherwise:
+	- MUST NOT provide `funding_fee_output_index`
 
 The sender:
   - when creating the funding transaction:
@@ -334,12 +372,17 @@ The sender:
 The recipient:
   - if `signature` is incorrect:
     - MUST fail the channel.
+  - if `feeasset_id` was provided in the `open_channel` message and `funding_fee_output_index` is not provided:
+    - MUST fail the channel.
 
 #### Rationale
 
 The `funding_output_index` can only be 2 bytes, since that's how it's packed into the `channel_id` and used throughout the gossip protocol. The limit of 65535 outputs should not be overly burdensome.
 
 A transaction with all Segregated Witness inputs is not malleable, hence the funding transaction recommendation.
+
+If `feeasset_id` was provided in the `open_channel` message, that means the channel is for a chain that supports multiple assets,
+and for an `asset_id` that's not accepted for on-chain fees. That means an additional output is needed to fund the fees.
 
 ### The `funding_signed` Message
 
