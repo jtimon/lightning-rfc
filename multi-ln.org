@@ -1,0 +1,58 @@
+#+TODO: TODO WIP | REVIEW
+
+* WIP Multi-asset lightning network
+
+** chain_hash serves to create channels for several chains
+
+Nodes can ignore the channels and gossip about chains they don't care about.
+
+Most implementations probably currently only support ignoring everything except one chain, but
+there's in principle nothing to be changed here at the design level.
+
+** WIP Forwarding fees are currently only per output (paying) channel, but...
+
+alexbosworth agrees it would make sense to support independent fees for combinations source:destination channels.
+Adds the use case of avoiding paying fees to yourself when you have several connected nodes, but is concerned about the potential combinatorial blowup.
+
+With that, a node could set prices for routing between channels of different assets. Note that this would allow setting a different price/fee for AAA:BBB than for BBB:AAA, or even AAAchannel1:BBBchannel2 and AAAchannel3:BBBchannel4.
+This may seem overkill, but I think doing less than this is probably early optimization.
+
+To help with the combinatorial blowup, perhaps 0 could mean "all other channels".
+For example, if we have 4 channels A, B, C and D, a node could configure all its rates/fees like this:
+
+0:B=1.99 (meaning from any other channel to channel B, you give almost 2 Bs for every A received, perhaps channel B represents an asset different asset that is worth half as much as the asset in all your other channels, plus you want to charge a fee).
+0:A=1 (meaning, from any other channel to channel A, the rate is 1:1, or in other words, you charge no fees, perhaps channel A is a channel to some other node you control)
+0:0=0.99 (meaning, for anything else not configured above, the rate is 0.99. Or, in other words, you charge a 1% fee)
+
+Ideally some of this configurations could be updated periodically by checking an external price API, subscribing to a feed or similar.
+
+** WIP Elements' chains support multiple assets
+
+*** WIP Determine the parts of the protocol which would need to be modified to add fields for asset ids within a chain
+
+In principle, channels for assets in chains with multiple need to determine which asset they refer to. It will be used explicitly (or in its CA version) in funding, closing, penalty and commitment transactions.
+
+As an additional complication, if the channel asset is not the same as the fee asset for that chain (or one of the fee assets if
+a chain supports multiple), all transactions will need additional feeasset inputs to fund the fees, and some of them an additional
+output (or 2 if both parties funded the fee output in the funding transaction, perhaps) for fee change.
+
+In this case, the funding transaction must contain 2 outputs, one with funds for the channel asset and another with the fee asset.
+Both have similar scriptPubKey as P2WSH to 2-of-2 multisig, but keys should not be reused.
+
+Also, there's no notion of dust for non-feeasset outputs. The fee cannot be used to determine if a given output is "worth it" for its weight. Therefore, non-feeasset outputs (HTLC or otherwise) cannot be trimmed based on that criteria.
+
+**** WIP 02-peer-protocol.md:
+***** open_channel
+Add optional 32 byte `asset_id`
+Add optional 32 byte `feeasset_id`
+**** WIP 03-transactions.md
+***** Funding Transaction
+First output uses `asset_id` if chain supports multiple assets
+Optional second output using `feeasset_id` if provided
+** TODO Elements' chains support CT and CA
+*** TODO Determine the parts of the protocol which would need to be modified to add fields for sharing secrets needed to be able to see output amounts and asset ids when necessary
+*** TODO Analyze the privacy implications for those changes
+* TODO Potential terms to add to the glossary:
+- asset
+- asset id
+- block producer
