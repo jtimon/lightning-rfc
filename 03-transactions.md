@@ -133,6 +133,45 @@ If a revoked commitment transaction is published, the other party can spend this
 
 This output sends funds to the other peer and thus is a simple P2WPKH to `remotepubkey`.
 
+#### `to_local_change` Output
+
+REM: Notes to translate to more formal language
+
+Only if the funding tx has a feeasset output.
+
+- We may need 2 anyway (beyond local/remote) because the funding channel can be funded mutually with bidirectional channels
+- If the change is below dust, it can all go to fees
+- Options:
+  1) the fee change can be used for revocation punishment just copying to_local's scheme but without reusing pubkeys
+  2) the revocation punishment can be only done in the channel asset
+  3) the revocation punishment can be only done in the fee asset
+  4) the fee change can be used for revocation punishment just copying to_local's scheme and reusing pubkeys
+- non-feeasset outputs cannot be trimmed (at least if 1 or 4 are chosen)
+
+In principle, option 1 seems the safest option for it seems to resemble the security
+assumptions for LN without multi-asset chains more closely (even though the dust assumptions for non-fee assets have been broken).
+But it also feels needlesly ineficcient.
+
+In principle, option 4 seems harmful for privacy and potentially for wallet security too.
+With a hardfork allowing a variable list of (asset_id, amount) for each output, with a single scriptpubkey, this could still make sense for efficiency reasons.
+
+In principle, 2 and 3 seem to inherently depend on potentially variable external price relationships between asset_id and feeasset_id.
+Mainly the block producers' perception about these prices.
+A reliable and trustless scheme (at least not adding more trust assumptions than assumed for block producers or asset issuers already) for relative prices between asset_id and feeasset_id could potentially restore a trimming criteria for non-feeasset outputs.
+
+Note that this separation could potentially be done if asset_id is provided but feeasset_id is not (aka they are the same),
+or even when the channel's chain supports a single asset.
+The potential advantages and use cases are unkown, possibly unexistent. For both each option beyond 1 and the last note above.
+
+
+#### `to_remote_change` Output
+
+Only if the funding tx  has a feeasset output.
+
+This output sends funds to the other peer and thus is a simple P2WPKH to `remotechangepubkey`.
+
+TODO grep remotechangepubkey
+
 #### Offered HTLC Outputs
 
 This output sends funds to either an HTLC-timeout transaction after the HTLC-timeout or to the remote node using the payment preimage or the revocation key. The output is a P2WSH, with a witness script:
