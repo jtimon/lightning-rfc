@@ -64,15 +64,29 @@ Most transaction outputs used here are pay-to-witness-script-hash<sup>[BIP141](h
 
 * Where `pubkey1` is the numerically lesser of the two DER-encoded `funding_pubkey` and where `pubkey2` is the numerically greater of the two.
 
+If `asset_id` is provided, the above output uses `asset_id` in that output's chain_id field.
+
+If both `asset_id` and `feeasset_id` are provided in the `open_channel` message and they are not equal (as described in [BOLT #2](02-peer-protocol.md)),
+a second output for `feeasset_id` is needed, similar to the previous one, but replacing
+`<pubkey1>` and `<pubkey2>` with `<pubkey3>` and `<pubkey4>` respectively.
+
 ## Commitment Transaction
 
 * version: 2
 * locktime: upper 8 bits are 0x20, lower 24 bits are the lower 24 bits of the obscured commitment number
-* txin count: 1
-   * `txin[0]` outpoint: `txid` and `output_index` from `funding_created` message
+* txin count: 1 or 2
+   * `txin[0]` outpoint: `txid` and `funding_output_index` from `funding_created` message
    * `txin[0]` sequence: upper 8 bits are 0x80, lower 24 bits are upper 24 bits of the obscured commitment number
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
+   * if `asset_id` is provided:
+	 * `txin[0]` asset_id: `asset_id`
+* if `feeasset_id` is provided:
+   * `txin[1]` asset_id: `feeasset_id`
+   * `txin[1]` outpoint: `txid` and `funding_fee_output_index` from `funding_created` message
+   * `txin[1]` sequence: `0`
+   * `txin[1]` script bytes: 0
+   * `txin[1]` witness: `0 <signature_for_pubkey3> <signature_for_pubkey4>`
 
 The 48-bit commitment number is obscured by `XOR` with the lower 48 bits of:
 
@@ -258,11 +272,19 @@ Note that there are two possible variants for each node.
 
 * version: 2
 * locktime: 0
-* txin count: 1
+* txin count: 1 or 2
    * `txin[0]` outpoint: `txid` and `output_index` from `funding_created` message
    * `txin[0]` sequence: 0xFFFFFFFF
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
+   * if `asset_id` is provided:
+	 * `txin[0]` asset_id: `asset_id`
+* if `feeasset_id` is provided:
+   * `txin[1]` asset_id: `feeasset_id`
+   * `txin[1]` outpoint: `txid` and `funding_fee_output_index` from `funding_created` message
+   * `txin[1]` sequence: 0xFFFFFFFF
+   * `txin[1]` script bytes: 0
+   * `txin[1]` witness: `0 <signature_for_pubkey3> <signature_for_pubkey4>`
 * txout count: 0, 1 or 2
    * `txout` amount: final balance to be paid to one node (minus `fee_satoshis` from `closing_signed`, if this peer funded the channel)
    * `txout` script: as specified in that node's `scriptpubkey` in its `shutdown` message
@@ -1560,4 +1582,3 @@ All of them use the following secrets (and thus the derived points):
 ![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png "License CC-BY")
 <br>
 This work is licensed under a [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).
-
