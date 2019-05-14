@@ -1,14 +1,14 @@
-#+TODO: TODO WIP | REVIEW
+#+TODO: TODO WIP | REVIEW DELETE
 
-* WIP Multi-asset lightning network
-
+* WIP Multi-chain lightning network
 ** chain_hash serves to create channels for several chains
 
 Nodes can ignore the channels and gossip about chains they don't care about.
 
 Most implementations probably currently only support ignoring everything except one chain, but
 there's in principle nothing to be changed here at the design level.
-
+** TODO multi chain expiry?
+*** TODO The protocol assumes a single chain for expiries
 ** WIP Forwarding fees are currently only per output (paying) channel, but...
 
 alexbosworth agrees it would make sense to support independent fees for combinations source:destination channels.
@@ -26,6 +26,14 @@ For example, if we have 4 channels A, B, C and D, a node could configure all its
 
 Ideally some of this configurations could be updated periodically by checking an external price API, subscribing to a feed or similar.
 
+** WIP Alternative: Simulation of multiple assets with separated nodes and fees
+
+- node A connects to network denominated in asset AAA
+- node B connects to network denominated in asset BBB
+- A channel from A to B and viceversa in which one part offers AAA and receives and viceversa
+- still need to route payments through several effectively partitioned networks
+
+* WIP Integratying Multi-asset chains in the lightning network
 ** WIP Elements' chains support multiple assets
 
 *** WIP Determine the parts of the protocol which would need to be modified to add fields for asset ids within a chain
