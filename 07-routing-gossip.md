@@ -538,6 +538,100 @@ the channel when the peer reestablishes contact.  Because gossip
 messages are batched and replace previous ones, the result may be a
 single seemingly-redundant update.
 
+## The `route_price_update` Message
+
+The *route price* is a multiplier applied to the amounts transferred by a hop for routing
+through two of its channels.
+
+Unless announced otherwise explicitly with this message, it is assumed
+that the route price for all pairs of channels of the same node with the same
+`chain_hash` is 1. For any pair of any pair of channels with different
+`chain_hash`, the route price is 0. That is, the hop will not route
+through any of those pairs of channels.
+
+1. type: NNN (`route_price_update`)
+2. data:
+    * [`64`:`signature`]
+    * [`4`:`timestamp`]
+    * [`4`:`route_price`]
+	* [`1`: `route_mode`] (CHANNEL_CHANNEL, CHAIN_CHAIN, CHAIN_CHANNEL, CHANNEL_CHAIN)
+    * [`33`:`node_id`]
+    * [`32`:`src_chain_hash`] (only for CHAIN_CHAIN or CHAIN_CHANNEL)
+    * [`32`:`dest_chain_hash`] (only for CHAIN_CHAIN or CHANNEL_CHAIN)
+    * [`8`:`src_short_channel_id`] (only for CHANNEL_CHANNEL or CHANNEL_CHAIN)
+    * [`8`:`dest_short_channel_id`] (only for CHANNEL_CHANNEL or CHAIN_CHANNEL)
+
+The `channel_mode` enumerated field is used to indicate the mode of the message:
+
+- CHANNEL_CHANNEL: The price is updated only for a specific pair of
+  channels identified by `src_short_channel_id` and `dest_short_channel_id`.
+
+- CHAIN_CHAIN: The price is updated for all pairs of channels with
+  channels that have `chain_hash` equal to `src_chain_hash` in this
+  message as source and `dest_chain_hash` equal to the `chain_hash`
+  for the second channel in the pair.
+
+- CHAIN_CHANNEL: updates prices for any pairs with the destination
+  indicated by `dest_chain_hash`, as long as the source channel's
+  `chain_hash` corresponds to the provided `src_chain_hash`.
+
+- CHANNEL_CHAIN: updates prices for any pairs with the source
+  indicated by `dest_chain_hash`, as long as the destination channel's
+  `chain_hash` corresponds to the provided `src_chain_hash`.
+
+More mode using different fields can be added in the future.
+
+To disable a route (or several), the `route_price` is simply set to 0.
+
+### Requirements
+
+The origin node:
+
+  - MUST set `node_id` to its own `node_id`.
+  - MUST set `signature` to the signature of the double-SHA256 of the entire
+  remaining packet after `signature`, using `node_id`.
+  - MUST set `route_mode` to CHANNEL_CHANNEL, CHAIN_CHAIN,
+    CHAIN_CHANNEL or CHANNEL_CHAIN
+  - if it sets `route_mode` to CHANNEL_CHANNEL:
+	- MUST set `src_short_channel_id` and `dest_short_channel_id`
+	- MUST NOT set `src_chain_hash` and `dest_chain_hash`
+  - if it sets `route_mode` to CHAIN_CHAIN:
+	- MUST set `src_chain_hash` and `dest_chain_hash`
+	- MUST NOT set `src_short_channel_id` and `dest_short_channel_id`
+  - if it sets `route_mode` to CHAIN_CHANNEL:
+	- MUST set `src_chain_hash` and `dest_short_channel_id`
+	- MUST NOT set `src_short_channel_id` and `dest_chain_hash`
+  - if it sets `route_mode` to CHANNEL_CHAIN:
+	- MUST set `src_short_channel_id` and `dest_chain_hash`
+	- MUST NOT set `src_chain_hash` and `dest_short_channel_id`
+  - if the message overwrites prices for more specific set pairs:
+    - SHOULD recreate with a `timestamp` greater than the one used in
+      this message and relay again.
+
+The receiving node:
+  - if the `route_mode` is unknown:
+    - MUST NOT process the message further.
+    - SHOULD return an error message. FIX and propagate backwards? I
+      don't think so
+
+
+TODO
+
+### Rationale
+
+FIX This design is wrong. For nodes to be sure their overwrites are
+understood, either never used new modes,
+
+TODO
+
+### TODOs
+
+- Question: In channel_update, why deduce the node_id but not the
+  chain_hash?
+  presumably for discarding unwanted messages faster?
+- TODO Optimize by getting the `node_id` from the channels like in
+  channel_update?
+
 ## Query Messages
 
 Negotiating the `gossip_queries` option via `init` enables a number
