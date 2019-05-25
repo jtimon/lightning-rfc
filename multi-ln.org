@@ -64,3 +64,5 @@ Optional second output using `feeasset_id` if provided
 - asset
 - asset id
 - block producer
+- hop route
+- route price
