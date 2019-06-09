@@ -64,15 +64,29 @@ Most transaction outputs used here are pay-to-witness-script-hash<sup>[BIP141](h
 
 * Where `pubkey1` is the numerically lesser of the two DER-encoded `funding_pubkey` and where `pubkey2` is the numerically greater of the two.
 
+If `asset_id` is provided, the above output uses `asset_id` in that output's chain_id field.
+
+If both `asset_id` and `feeasset_id` are provided in the `open_channel` message and they are not equal (as described in [BOLT #2](02-peer-protocol.md)),
+a second output for `feeasset_id` is needed, similar to the previous one, but replacing
+`<pubkey1>` and `<pubkey2>` with `<pubkey3>` and `<pubkey4>` respectively.
+
 ## Commitment Transaction
 
 * version: 2
 * locktime: upper 8 bits are 0x20, lower 24 bits are the lower 24 bits of the obscured commitment number
-* txin count: 1
-   * `txin[0]` outpoint: `txid` and `output_index` from `funding_created` message
+* txin count: 1 or 2
+   * `txin[0]` outpoint: `txid` and `funding_output_index` from `funding_created` message
    * `txin[0]` sequence: upper 8 bits are 0x80, lower 24 bits are upper 24 bits of the obscured commitment number
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
+   * if `asset_id` is provided:
+	 * `txin[0]` asset_id: `asset_id`
+* if `feeasset_id` is provided:
+   * `txin[1]` asset_id: `feeasset_id`
+   * `txin[1]` outpoint: `txid` and `funding_fee_output_index` from `funding_created` message
+   * `txin[1]` sequence: `0`
+   * `txin[1]` script bytes: 0
+   * `txin[1]` witness: `0 <signature_for_pubkey3> <signature_for_pubkey4>`
 
 The 48-bit commitment number is obscured by `XOR` with the lower 48 bits of:
 
@@ -118,6 +132,45 @@ If a revoked commitment transaction is published, the other party can spend this
 #### `to_remote` Output
 
 This output sends funds to the other peer and thus is a simple P2WPKH to `remotepubkey`.
+
+#### `to_local_change` Output
+
+REM: Notes to translate to more formal language
+
+Only if the funding tx has a feeasset output.
+
+- We may need 2 anyway (beyond local/remote) because the funding channel can be funded mutually with bidirectional channels
+- If the change is below dust, it can all go to fees
+- Options:
+  1) the fee change can be used for revocation punishment just copying to_local's scheme but without reusing pubkeys
+  2) the revocation punishment can be only done in the channel asset
+  3) the revocation punishment can be only done in the fee asset
+  4) the fee change can be used for revocation punishment just copying to_local's scheme and reusing pubkeys
+- non-feeasset outputs cannot be trimmed (at least if 1 or 4 are chosen)
+
+In principle, option 1 seems the safest option for it seems to resemble the security
+assumptions for LN without multi-asset chains more closely (even though the dust assumptions for non-fee assets have been broken).
+But it also feels needlesly ineficcient.
+
+In principle, option 4 seems harmful for privacy and potentially for wallet security too.
+With a hardfork allowing a variable list of (asset_id, amount) for each output, with a single scriptpubkey, this could still make sense for efficiency reasons.
+
+In principle, 2 and 3 seem to inherently depend on potentially variable external price relationships between asset_id and feeasset_id.
+Mainly the block producers' perception about these prices.
+A reliable and trustless scheme (at least not adding more trust assumptions than assumed for block producers or asset issuers already) for relative prices between asset_id and feeasset_id could potentially restore a trimming criteria for non-feeasset outputs.
+
+Note that this separation could potentially be done if asset_id is provided but feeasset_id is not (aka they are the same),
+or even when the channel's chain supports a single asset.
+The potential advantages and use cases are unkown, possibly unexistent. For both each option beyond 1 and the last note above.
+
+
+#### `to_remote_change` Output
+
+Only if the funding tx  has a feeasset output.
+
+This output sends funds to the other peer and thus is a simple P2WPKH to `remotechangepubkey`.
+
+TODO grep remotechangepubkey
 
 #### Offered HTLC Outputs
 
@@ -258,11 +311,19 @@ Note that there are two possible variants for each node.
 
 * version: 2
 * locktime: 0
-* txin count: 1
+* txin count: 1 or 2
    * `txin[0]` outpoint: `txid` and `output_index` from `funding_created` message
    * `txin[0]` sequence: 0xFFFFFFFF
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
+   * if `asset_id` is provided:
+	 * `txin[0]` asset_id: `asset_id`
+* if `feeasset_id` is provided:
+   * `txin[1]` asset_id: `feeasset_id`
+   * `txin[1]` outpoint: `txid` and `funding_fee_output_index` from `funding_created` message
+   * `txin[1]` sequence: 0xFFFFFFFF
+   * `txin[1]` script bytes: 0
+   * `txin[1]` witness: `0 <signature_for_pubkey3> <signature_for_pubkey4>`
 * txout count: 0, 1 or 2
    * `txout` amount: final balance to be paid to one node (minus `fee_satoshis` from `closing_signed`, if this peer funded the channel)
    * `txout` script: as specified in that node's `scriptpubkey` in its `shutdown` message
@@ -1560,4 +1621,3 @@ All of them use the following secrets (and thus the derived points):
 ![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png "License CC-BY")
 <br>
 This work is licensed under a [Creative Commons Attribution 4.0 International License](http://creativecommons.org/licenses/by/4.0/).
-
